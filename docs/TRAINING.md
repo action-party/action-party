@@ -8,9 +8,13 @@ torchrun --nproc_per_node=<N_GPUS> --max_restarts=0 \
     train.py --config_path configs/<config>.yaml
 ```
 
-Checkpoints land under ``checkpoints/<config_name>/checkpoint_model_XXXXXX/model.pt``.
+Checkpoints land under ``checkpoints/<config_name>/checkpoint_model_XXXXXX/model.pt``,
+written every ``log_iters`` steps (``save_iters`` is currently not read).
 All configs use ``lr=1e-4``, ``beta1=0.9``, ``beta2=0.99``, flow matching
-loss, UniPC sampler for validation, and gradient checkpointing.
+loss, and gradient checkpointing.
+
+Training does not stop on its own: ``num_iter`` only sets the length of the
+cosine LR schedule, so stop the job once it reaches the step you want.
 
 ## Dependency graph
 
@@ -70,13 +74,18 @@ Weights & Biases logging is **disabled by default** (``configs/default_config.ya
 sets ``disable_wandb: true``). To enable it, set ``wandb_entity`` (and optionally
 ``wandb_project``) to your own account and flip ``disable_wandb: false``; the API key
 is read from the ``WANDB_API_KEY`` environment variable. Pass ``--disable-wandb`` to
-keep it off explicitly. Sample grids and per-game validation GIFs are written to
-``outputs/<run_name>/`` regardless of the W&B setting.
+keep it off explicitly. The trainer does not run validation sampling; use
+``scripts/inference/inference_all_games_coord.py`` on a saved checkpoint to
+produce per-game comparison GIFs.
 
 ## Resuming
 
+Resuming is automatic: if ``checkpoints/<config_name>/`` (or ``--logdir``) already
+contains ``checkpoint_model_*/model.pt``, ``train.py`` loads the latest one
+(generator, EMA, optimizer and conditioner state) and continues from its step.
+Re-run the same command to resume:
+
 ```bash
 torchrun ... train.py \
-    --config_path configs/exp-139-multi-game-coord-512.yaml \
-    --resume_from_checkpoint checkpoints/exp-139-multi-game-coord-512/checkpoint_model_010000
+    --config_path configs/exp-139-multi-game-coord-512.yaml
 ```

@@ -33,7 +33,7 @@ def main():
         config.logdir = f"checkpoints/{config_name}"
 
     config.wandb_save_dir = args.wandb_save_dir
-    config.disable_wandb = args.disable_wandb
+    config.disable_wandb = args.disable_wandb or config.get("disable_wandb", False)
 
     # The open-source branch only ships the diffusion trainer (used by every
     # exp-131/134/135/138/139/141-147 config). The upstream

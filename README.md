@@ -73,9 +73,9 @@ pip install dm-meltingpot
 
 ### Quickstart: train the headline model (exp-139)
 
-1. **Get the dataset.** Either generate it locally or download the pre-built LMDBs. See [`docs/DATASET.md`](docs/DATASET.md).
-2. **Pretrain** the video-only base (`exp-138`) on the 46-game dataset, or download our released checkpoint.
-3. **Fine-tune** with coord-token diffusion:
+1. **Get the dataset.** Generate it locally from Melting Pot (the pre-built LMDBs are not released yet). See [`docs/DATASET.md`](docs/DATASET.md).
+2. **Pretrain** the video-only base (`exp-138`) on the 46-game dataset (pretrained checkpoints are not released yet).
+3. **Fine-tune** with coord-token diffusion. First set `generator_ckpt` in `configs/exp-139-multi-game-coord-512.yaml` to your exp-138 checkpoint (the config points at `checkpoint_model_022500`):
 
 ```bash
 torchrun --nproc_per_node=1 --max_restarts=0 \
@@ -102,6 +102,19 @@ This produces per-game comparison GIFs (ground-truth left, generated right with 
 - [`docs/DATASET.md`](docs/DATASET.md) — LMDB schema and dataset creation
 - [`docs/TRAINING.md`](docs/TRAINING.md) — configs and compute
 - [`docs/ABLATIONS.md`](docs/ABLATIONS.md) — ablation configs 141–145
+
+## Status
+
+This is a research code release and has not yet been tested end to end outside
+our original setup. Known gaps:
+
+- The pre-built dataset and pretrained checkpoints are not released yet.
+- Training runs until stopped; `num_iter` only sets the LR schedule (see [`docs/TRAINING.md`](docs/TRAINING.md)).
+- The text-action baselines (exp-144, exp-146) import a `game_action_text` module that is not included yet.
+- exp-150, 152–154 and 157–159 set options the trainer does not implement yet (e.g. orientation state, view tokens). The headline path (exp-138 → exp-139) and the coins ablations (131, 134, 135, 141–143, 145) are the supported configs.
+- The trained player-tile classifiers used by the action-accuracy metrics in `scripts/eval/` are not included.
+
+Please open an issue if you run into problems.
 
 ## Acknowledgements
 
