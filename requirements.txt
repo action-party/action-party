@@ -1,6 +1,6 @@
 # Core training stack
-torch>=2.4.0
-torchvision>=0.19.0
+torch>=2.5.0  # FlexAttention
+torchvision>=0.20.0
 diffusers==0.31.0
 transformers>=4.49.0
 tokenizers>=0.20.3
@@ -37,3 +37,7 @@ git+https://github.com/openai/CLIP.git
 scipy
 joblib
 scikit-image
+
+# Evaluation (scripts/eval/)
+scikit-learn
+lpips
