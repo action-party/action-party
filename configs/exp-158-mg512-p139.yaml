@@ -1,0 +1,113 @@
+# MG 512: position-only continuation from 139 ckpt (reviewer control vs 157 orient run).
+# Same hparams as 157 except 2D coord (no orientation).
+#
+# Train:
+#   torchrun --nproc_per_node=8 train.py --config configs/exp-158-mg512-p139.yaml
+#   NODE_NUM=1 ./submit_job.sh exp-158-mg512-p139
+# Eval: same as 139 / 157 (512, run_ablation_eval.py).
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+generator_ckpt: checkpoints/exp-139-multi-game-coord-512/checkpoint_model_071500/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_2k
+multi_game_dataset: true
+
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 8
+num_subjects_total: 8
+num_subjects: 8
+num_action_classes: 25
+latent_patch_size: 8
+position_speed: 32
+
+use_gt_positions_for_rope: true
+
+coord_token_mode: true
+coord_diffusion: true
+coord_temporal_rope: true
+coord_spatial_rope: true
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false
+coord_no_encoder_decoder: false
+coord_train_full_dit: true
+coord_scale_factor: 4.0
+coord_loss_weight: 1.0
+
+# Position-only (default): no coord_orientation_in_state, no coord_init_4d_from_2d_ckpt
+
+cross_attn_rope: true
+subject_isolation_self_attn: true
+use_flex_attention: true
+zero_position_for_masked: true
+position_before_action: true
+use_subject_mask: true
+use_game_descriptions: true
+
+synthetic_num_frames: 17
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+batch_size: 4
+overfit_single_sample: false
+
+ema_weight: 0.9999
+ema_start_step: 100
+
+log_iters: 500
+save_iters: 2500
+negative_prompt: ''
+num_iter: 50000
+
+image_or_video_shape:
+- 1
+- 5
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 158-mg512-p139

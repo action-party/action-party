@@ -1,0 +1,159 @@
+# MULTI-GAME COORD (139-style) + AR CONTEXT NOISE AUGMENTATION
+#
+# Same setup as exp-139-multi-game-coord-512.yaml, plus:
+# - Light corruption of *context* video latents (frames before the AR target), via flow-match
+#   scheduling (same as teacher-forcing noise aug), capped by ar_context_latent_noise_max_timestep.
+# - Small Gaussian jitter on *context* normalized (x,y), capped to [0,1]; sigma chosen well below
+#   one latent patch width in normalized space (~1/64 at 512→64×64 latent) so jumps past ~one tile
+#   are unlikely without hard clamping.
+#
+# Tuning (avoid too little / too much):
+# - Latent: raise max timestep index if context still looks unnaturally clean vs inference rollouts;
+#   lower if training destabilizes. Indices are uniform in [0, max_t) (exclusive upper bound).
+# - Coords: sigma ~ (1/64)/6 … (1/64)/3 ≈ 0.0026–0.005 in normalized units is a reasonable band.
+#
+# Train (recommended first — fewer nodes often avoids rendezvous / NCCL issues seen on 4-node runs):
+#   NODE_NUM=2 ./submit_job.sh exp-154-multi-game-coord-512-ar-context-noise
+#   (16 processes total; assumes 8 GPUs per node like default submit_job.sh.)
+#
+# Optional — more throughput, same sample budget in ~half the steps (if scaling holds):
+#   NODE_NUM=4 GPU_NUM=8 ./submit_job.sh exp-154-multi-game-coord-512-ar-context-noise
+#
+# Local / single node (8 GPUs):
+#   torchrun --nproc_per_node=8 train.py --config_path configs/exp-154-multi-game-coord-512-ar-context-noise.yaml
+#
+# === SAMPLE / COMPUTE MATCH VS exp-139 ===
+# 139 yaml: batch_size=4 per GPU, num_iter=50000 → samples ≈ 4 × world_size × 50000.
+# This yaml: batch_size=16 per GPU → global_batch = 16 × world_size (4× samples per step vs 139 at same world_size).
+#
+# Match **the same total samples** as 139 on **16 GPUs** (2 nodes × 8 GPUs, the usual 139 layout):
+#   samples_ref ≈ 4 × 16 × 50000 = 3.2e6
+#   num_iter_here = samples_ref / (16 × world_size) = 50000 × (4/16) = **12500** when world_size=16.
+#
+# Same sample budget on **32 GPUs** (4 nodes × 8): global 512 → num_iter = 3.2e6 / 512 = **6250**
+# (about **half the optimizer steps** of the 2-node run; wall time improves only if step time doesn’t dominate).
+#
+# **2× total samples** vs that 139 reference (≈6.4e6): double num_iter
+# (**25000** @ 16 GPUs, **12500** @ 32 GPUs).
+#
+# Generic: num_iter = (50000 × 4 × W_ref) / (16 × W_run) with W_ref = GPU count for the 139 run you compare to
+# (often 16), W_run = yours; ×2 for double sample budget.
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+generator_ckpt: checkpoints/exp-138-base-wan-pretrain-multi-game-512/checkpoint_model_022500/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_2k
+multi_game_dataset: true
+
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 8
+num_subjects_total: 8
+num_subjects: 8
+num_action_classes: 25
+latent_patch_size: 8
+position_speed: 32
+
+use_gt_positions_for_rope: true
+
+coord_token_mode: true
+coord_diffusion: true
+coord_temporal_rope: true
+coord_spatial_rope: true
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false
+coord_no_encoder_decoder: false
+coord_train_full_dit: true
+coord_scale_factor: 4.0
+coord_loss_weight: 1.0
+
+cross_attn_rope: true
+subject_isolation_self_attn: true
+use_flex_attention: true
+
+zero_position_for_masked: true
+position_before_action: true
+
+use_subject_mask: true
+use_game_descriptions: true
+
+synthetic_num_frames: 17
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+# Per-GPU; see header for num_iter vs world_size (global batch = 16 × num_processes).
+batch_size: 16
+overfit_single_sample: false
+
+ema_weight: 0.9999
+ema_start_step: 100
+
+log_iters: 500
+# Shorter matched runs: save more often than 139’s 2500.
+save_iters: 1000
+negative_prompt: ''
+# Default num_iter matches **139 sample budget** at **16 GPUs** (2 nodes × 8, batch 16 → global 256).
+# If you run **32 GPUs** (4 nodes), set num_iter to **6250** for the same total samples.
+# For **2× samples** vs 139 @ 16 GPU ref: use **25000** here (or **12500** on 32 GPUs).
+num_iter: 12500
+
+image_or_video_shape:
+- 1
+- 5
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+
+# Unused when teacher_forcing is false (legacy path); AR context latent aug uses keys below.
+noise_augmentation_max_timestep: 0
+
+# Flow timestep index upper bound (exclusive) for context latent jitter; ~50–150 typical band.
+ar_context_latent_noise_max_timestep: 100
+
+# Normalized [0,1] Gaussian std per axis on context xy; ~0.004 ≈ mid of “small vs one tile (~0.016)” band.
+ar_context_coord_jitter_sigma: 0.004
+
+config_name: 154-multi-game-coord-512-ar-context-noise

@@ -1,0 +1,51 @@
+# Python bytecode / packaging
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# Model weights / base checkpoints downloaded at install time
+wan_models/
+checkpoints/
+
+# Training artifacts
+outputs/
+outputs_*/
+wandb/
+*.log
+core.*
+
+# Datasets (hosted externally — see docs/DATASET.md)
+datasets/
+*.mdb
+shard*
+*.shard*
+
+# Locally generated media / reports
+*.png
+*.mp4
+*.gif
+*.pdf
+*.tar
+*.npz
+*.pkl
+*.html
+
+# Upstream Wan2.1 reference copy kept locally but not tracked.
+wan2_official/
+wan2_official
+
+# Staged release artifact bundle inside repo (optional; default bundle is sibling dir)
+artifact_bundle/
+
+# Local archive tree and symlinks into it (logs, upstream copies).
+_archive/
+logs
+
+# Duplicate of tools/port_eval_from_main.py at repo root.
+_port_from_main.py
+
+# Transient generated JSON (validation summaries etc.)
+*.json
+# ...but preserve any JSON configs committed on purpose
+!configs/**/*.json

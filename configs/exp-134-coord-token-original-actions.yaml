@@ -1,0 +1,145 @@
+# COORDINATE TOKEN DIFFUSION on MELTING POT COINS - ORIGINAL ACTION SPACE
+#
+# Coord-token diffusion on Melting Pot coins with the original
+# Melting Pot action space (7 relative actions with orientation):
+#   0: NOOP, 1: FORWARD, 2: BACKWARD, 3: STEP_LEFT, 4: STEP_RIGHT,
+#   5: TURN_LEFT, 6: TURN_RIGHT
+#
+# Key differences from the 5-action coord-token setup:
+# - num_action_classes: 7 (was 5)
+# - data_path: melting_pot_coins_original_actions (relative action space dataset)
+# - use_gt_positions_for_rope: true - spatial RoPE positions computed from GT
+#   frame_coords instead of action deltas (required because movement depends
+#   on agent orientation, which the conditioner does not track)
+#
+# Initialize from:
+#   checkpoints/exp-135-base-wan-pretrain-original-actions/checkpoint_model_XXXXX
+#   (update path once 135 pretraining is done)
+#
+# Train:
+#   torchrun --nproc_per_node=2 train.py --config configs/exp-134-coord-token-original-actions.yaml
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+# Load text encoder for video token conditioning (same as pretraining)
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+# === PRETRAINED CHECKPOINT ===
+generator_ckpt: checkpoints/exp-135-base-wan-pretrain-original-actions/checkpoint_model_007000/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MELTING POT COINS - ORIGINAL ACTIONS DATASET ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_coins_original_actions
+
+# === ACTION CONDITIONING ===
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 2
+num_subjects_total: 2
+num_subjects: 2
+num_action_classes: 7
+latent_patch_size: 8
+position_speed: 32
+
+# === GT POSITIONS FOR SPATIAL ROPE ===
+# Required for relative action space: cannot compute positions from actions alone
+# (movement depends on agent orientation). Uses frame_coords from dataset instead.
+use_gt_positions_for_rope: true
+
+# === COORDINATE TOKEN MODE ===
+coord_token_mode: true
+coord_diffusion: true
+coord_temporal_rope: true
+coord_spatial_rope: true
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false
+coord_no_encoder_decoder: false
+coord_train_full_dit: true
+coord_scale_factor: 4.0
+coord_loss_weight: 1.0
+
+# === 3D ROPE IN CROSS-ATTENTION ===
+cross_attn_rope: true
+
+# === SUBJECT ISOLATION IN SELF-ATTENTION ===
+subject_isolation_self_attn: true
+
+# === FLEX ATTENTION ===
+use_flex_attention: true
+
+# === POSITION FIXES ===
+zero_position_for_masked: true
+position_before_action: true
+
+# === FIXED TEXT PROMPT FOR VIDEO TOKENS ===
+fixed_prompt: "Sprites moving on a grid and picking up coins"
+
+# Video parameters
+synthetic_num_frames: 33
+synthetic_height: 256
+synthetic_width: 256
+
+load_raw_video: false
+batch_size: 8
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 500
+negative_prompt: ''
+num_iter: 10000
+
+# Video shape
+image_or_video_shape:
+- 1
+- 9
+- 16
+- 32
+- 32
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 134-coord-token-original-actions

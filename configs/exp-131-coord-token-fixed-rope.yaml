@@ -1,0 +1,139 @@
+# COORDINATE TOKEN MODE on SHAPE DATASET - FIXED RoPE
+# 
+# Same as the earlier coord-token diffusion on shapes, but with two RoPE fixes:
+# 1. BUG FIX: coord_h/coord_w were mapped to H//2 x W//2 = 8x8 grid instead of 
+#    the correct H x W = 16x16 video patch grid. Now uses full H, W.
+# 2. DESIGN FIX: noisy/masked coord frames now use (0, 0) spatial RoPE (identity 
+#    rotation) instead of the last clean position. This matches the action 
+#    conditioner's zero_position_for_masked=True behavior, where masked action 
+#    embeddings get (0,0,0) RoPE positions.
+#
+# Net effect:
+# - Context coord tokens: (frame_t, prev_h, prev_w) on correct 16x16 grid
+# - Noisy coord tokens: (frame_t, 0, 0) = no spatial bias, temporal only
+# - Action keys (masked): (0, 0, 0) = identity rotation (unchanged)
+# - Action keys (clean): (frame_t, h_before, w_before) on 16x16 grid (unchanged)
+#
+# Train:
+#   torchrun --nproc_per_node=2 train.py --config configs/exp-131-coord-token-fixed-rope.yaml
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn  # Reuse masked cross-attention
+
+# No pretrained checkpoint - training from scratch on shape dataset
+load_vae: false
+load_text_encoder: false
+load_score_models: false
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === SHAPE DATASET (simpler than melting pot) ===
+dataset_type: lmdb
+data_path: datasets/random_blob_position_2subj
+
+# === ACTION CONDITIONING ===
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 2
+num_subjects_total: 2
+num_subjects: 2
+num_action_classes: 5
+latent_patch_size: 8
+position_speed: 16
+
+# === COORDINATE TOKEN MODE (instead of position_token_mode) ===
+coord_token_mode: true
+coord_diffusion: true            # Diffuse coords like video
+coord_temporal_rope: true        # Frame index in RoPE
+coord_spatial_rope: true         # Previous position in RoPE
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false    # Use learned encoder
+coord_no_encoder_decoder: false  # Use learned decoder
+coord_train_full_dit: true       # Train full DiT, not just encoder/decoder
+coord_scale_factor: 4.0          # Scale factor for coord centering
+coord_loss_weight: 1.0
+
+# === 3D ROPE IN CROSS-ATTENTION ===
+# Apply 3D RoPE to both coord token queries and action embedding keys
+# Coord tokens: (frame, prev_h, prev_w) based on previous clean position
+# Action embeddings: (frame, h_before, w_before)
+cross_attn_rope: true
+
+# === SUBJECT ISOLATION IN SELF-ATTENTION ===
+# Each subject's coord tokens can only attend to:
+# - Video tokens (all of them)
+# - Their own coord tokens
+# Cross-subject coord attention (S0 coord ↔ S1 coord) is BLOCKED
+subject_isolation_self_attn: true
+
+# === FLEX ATTENTION ===
+use_flex_attention: true
+
+# === POSITION FIXES ===
+zero_position_for_masked: true
+position_before_action: true
+
+# Video parameters
+synthetic_num_frames: 33
+synthetic_height: 256
+synthetic_width: 256
+
+load_raw_video: false
+batch_size: 8
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 100
+negative_prompt: ''
+num_iter: 10000
+
+# Video shape (16ch video, coord tokens are separate in sequence)
+image_or_video_shape:
+- 1
+- 9
+- 16
+- 32
+- 32
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 131-coord-token-fixed-rope

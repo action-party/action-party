@@ -1,0 +1,174 @@
+# COORDINATE TOKEN DIFFUSION on MELTING POT COINS — POSITION + ORIENTATION
+#
+# Reviewer ablation: lightweight comparison of position-only state (134) vs
+# position+orientation state (this config). The per-subject coord state is
+# extended from 2D (x, y) to 4D (x, y, sin theta, cos theta), where
+#   theta = orientation * pi / 2
+# for discrete orientation in {0, 1, 2, 3} (N, E, S, W).
+#
+# Architecture changes vs 134 (gated by coord_orientation_in_state):
+# - WanModel.coord_encoder: nn.Linear(4, dim) instead of nn.Linear(2, dim)
+# - WanModel.coord_decoder: nn.Linear(dim, 4) instead of nn.Linear(dim, 2)
+# - Coord state is concat([(x-0.5)*scale, (y-0.5)*scale, sin theta, cos theta])
+#   - (x, y) channels keep coord_scale_factor scaling
+#   - (sin, cos) channels stay native [-1, 1]
+# - Loss: position MSE (channels 0,1) + coord_orient_loss_weight × orientation
+#   MSE (channels 2,3); both averaged over both-present subjects/time.
+# - At inference, predicted (sin, cos) is snapped to the nearest cardinal
+#   direction via atan2 -> argmax over {0, pi/2, pi, 3pi/2}.
+#
+# Initialised from same pretrain as 134 (exp-135 step 7000). The 4D
+# coord_encoder / coord_decoder layers initialise from scratch (the pretrain
+# does not have these layers — they are coord_token_mode-specific). All other
+# layers load from the pretrain identically to 134.
+#
+# Compute matched to 134 (same total samples as bs=8 × 10k iters): 1 node ×
+# 8 H100 × bs=16 × 5000 iters — roughly half the wall-clock of bs=8 × 10k
+# (~8–10 h if throughput scales; stop manually at 5000 — num_iter does not
+# halt the training loop). Eval suite identical to other ablations:
+#
+#   python scripts/eval/run_ablation_eval.py \
+#       --config configs/exp-152-coord-position-orientation.yaml \
+#       --checkpoint checkpoints/exp-152-coord-position-orientation/\
+# checkpoint_model_005000/model.pt \
+#       --name 152-coord-position-orientation-step5000 \
+#       --output_base outputs_ckpts/ablation_eval \
+#       --num_samples 25 \
+#       --classifier outputs_ckpts/<val-set>/\
+# player_tile_classifier.pkl \
+#       --tile_size 16 --image_size 256
+#
+# Train:
+#   NODE_NUM=1 ./submit_job.sh exp-152-coord-position-orientation
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+# Load text encoder for video token conditioning (same as 134)
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+# === PRETRAINED CHECKPOINT (matched to 134) ===
+generator_ckpt: checkpoints/exp-135-base-wan-pretrain-original-actions/checkpoint_model_007000/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS (identical to 134) ===
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MELTING POT COINS - ORIGINAL ACTIONS DATASET (identical to 134) ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_coins_original_actions
+
+# === ACTION CONDITIONING (identical to 134) ===
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 2
+num_subjects_total: 2
+num_subjects: 2
+num_action_classes: 7
+latent_patch_size: 8
+position_speed: 32
+
+# === GT POSITIONS FOR SPATIAL ROPE (identical to 134) ===
+use_gt_positions_for_rope: true
+
+# === COORDINATE TOKEN MODE (identical to 134) ===
+coord_token_mode: true
+coord_diffusion: true
+coord_temporal_rope: true
+coord_spatial_rope: true
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false
+coord_no_encoder_decoder: false
+coord_train_full_dit: true
+coord_scale_factor: 4.0
+coord_loss_weight: 1.0
+
+# === ORIENTATION-IN-STATE ABLATION (the only delta vs 134) ===
+# When True, the per-subject coord state is 4D = (x, y, sin theta, cos theta).
+# Dataset must serve `orientations_*` (PositionTokenLMDBDataset honours this
+# flag and falls back gracefully if the LMDB lacks the key).
+coord_orientation_in_state: true
+# Multiplier on the orientation channels in the flow MSE loss; 1.0 keeps the
+# orient and pos channels at equal weight.
+coord_orient_loss_weight: 1.0
+
+# === 3D ROPE IN CROSS-ATTENTION (identical to 134) ===
+cross_attn_rope: true
+
+# === SUBJECT ISOLATION IN SELF-ATTENTION (identical to 134) ===
+subject_isolation_self_attn: true
+
+# === FLEX ATTENTION (identical to 134) ===
+use_flex_attention: true
+
+# === POSITION FIXES (identical to 134) ===
+zero_position_for_masked: true
+position_before_action: true
+
+# === FIXED TEXT PROMPT FOR VIDEO TOKENS (identical to 134) ===
+fixed_prompt: "Sprites moving on a grid and picking up coins"
+
+# Video parameters (identical to 134)
+synthetic_num_frames: 33
+synthetic_height: 256
+synthetic_width: 256
+
+load_raw_video: false
+batch_size: 16
+overfit_single_sample: false
+
+# EMA (identical to 134)
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 500
+negative_prompt: ''
+num_iter: 5000
+
+# Video shape (identical to 134)
+image_or_video_shape:
+- 1
+- 9
+- 16
+- 32
+- 32
+
+trainer: diffusion
+
+# === AR TRAINING MODE (identical to 134) ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 152-coord-position-orientation

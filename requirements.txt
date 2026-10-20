@@ -1,0 +1,39 @@
+# Core training stack
+torch>=2.4.0
+torchvision>=0.19.0
+diffusers==0.31.0
+transformers>=4.49.0
+tokenizers>=0.20.3
+accelerate>=1.1.1
+safetensors>=0.4.0
+einops
+omegaconf
+numpy==1.24.4
+pydantic==2.10.6
+
+# I/O + video
+opencv-python>=4.9.0.80
+imageio
+imageio-ffmpeg
+av==13.1.0
+Pillow
+lmdb
+
+# Logging / experiment tracking
+wandb
+tqdm
+huggingface_hub[cli]
+
+# Upstream Wan2.1 dependencies (T5 text encoder, prompt extension, CLIP for I2V)
+ftfy
+easydict
+dashscope
+sentencepiece
+open_clip_torch
+git+https://github.com/openai/CLIP.git
+
+# Dataset creation (optional; only needed to regenerate LMDBs locally)
+# Install DeepMind Melting Pot separately: `pip install dm-meltingpot`
+scipy
+joblib
+scikit-image
