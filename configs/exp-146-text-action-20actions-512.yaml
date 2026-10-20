@@ -1,0 +1,111 @@
+# 20-ACTION TEXT-BASED ACTION HISTORY CONDITIONING ON 46 MELTING POT GAMES (512x512)
+#
+# Finetuned from exp-144 (5 latent frames, 4 actions) on the 20-action
+# dataset with compact text prompts to fit within the 512 T5 token limit.
+#
+# Dataset: melting_pot_all_games_512_20a_2k (46 games, 2000 samples each = 92k total)
+# Resolution: 512x512 → 64x64 latent spatial
+# Temporal: 81 pixel frames → 21 latent frames (20 actions × 4 steps + 1)
+#
+# Train:
+#   torchrun --nproc_per_node=2 train.py --config_path configs/exp-146-text-action-20actions-512.yaml
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+
+# Load text encoder for dynamic text conditioning
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+# === PRETRAINED CHECKPOINT ===
+# Finetune from latest exp-144 (text action history, 4 actions, 512x512)
+generator_ckpt: checkpoints/exp-144-text-action-history-512/checkpoint_model_010000/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MULTI-GAME MELTING POT DATASET ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_20a_2k
+use_position_token_dataset: true
+multi_game_dataset: true
+# Max subjects/actions across all 46 games (for padding)
+num_subjects_total: 8   # padded to 8 for consistency with coord diffusion configs
+num_action_classes: 25  # fruit_market has 25 actions
+
+# === TEXT ACTION CONDITIONING ===
+text_action_conditioning: true
+text_action_history: true
+compact_action_text: true
+
+# === NO EMBEDDING/TOKEN-BASED ACTION CONDITIONING ===
+use_action_only_conditioning: false
+videojam_mode: false
+position_token_mode: false
+coord_token_mode: false
+
+# === PER-GAME TEXT DESCRIPTIONS ===
+use_game_descriptions: true
+
+# Video parameters (512x512 resolution, 81 pixel frames → 21 latent)
+synthetic_num_frames: 81
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+batch_size: 8
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 2500
+negative_prompt: ''
+num_iter: 50000
+
+# Video shape: [batch, T_latent, C, H_latent, W_latent]
+# 512x512 / 8 = 64x64 latent, 81 pixel frames → 21 latent frames
+image_or_video_shape:
+- 1
+- 21
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 146-text-action-20actions-512

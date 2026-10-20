@@ -1,0 +1,152 @@
+# MULTI-GAME COORDINATE TOKEN DIFFUSION - 512x512 RESOLUTION
+#
+# Fine-tune from exp-138 (multi-game base pretrain at 512x512) with:
+# - 46-game Melting Pot dataset at 512x512 resolution
+# - Variable player counts (2-7 subjects, padded to 7)
+# - Variable action spaces (7-25 actions)
+# - Coordinate diffusion with subject isolation
+# - Per-game text descriptions
+# - subject_mask applied to coord loss (only real subjects contribute)
+#
+# Dataset: melting_pot_all_games_512_2k (46 games, 2000 samples each = 92k total)
+# Resolution: 512x512 → 64x64 latent, 17 pixel frames → 5 latent frames
+#
+# Train:
+#   torchrun --nproc_per_node=1 train.py --config configs/exp-139-multi-game-coord-512.yaml
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+# Load text encoder for video token conditioning (same as pretraining)
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+# === PRETRAINED CHECKPOINT ===
+# Multi-game base WAN pretrain (512x512, 46 games, no action conditioning)
+generator_ckpt: checkpoints/exp-138-base-wan-pretrain-multi-game-512/checkpoint_model_022500/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MULTI-GAME MELTING POT DATASET ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_2k
+multi_game_dataset: true
+
+# === ACTION CONDITIONING ===
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+# Padded to 8 for neatness (max actual is 7 from predator_prey__open)
+num_subjects_per_video: 8
+num_subjects_total: 8
+num_subjects: 8
+# Max action classes across all 46 games (fruit_market has 25)
+num_action_classes: 25
+latent_patch_size: 8
+position_speed: 32
+
+# === GT POSITIONS FOR SPATIAL ROPE ===
+use_gt_positions_for_rope: true
+
+# === COORDINATE TOKEN MODE ===
+coord_token_mode: true
+coord_diffusion: true
+coord_temporal_rope: true
+coord_spatial_rope: true
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false
+coord_no_encoder_decoder: false
+coord_train_full_dit: true
+coord_scale_factor: 4.0
+coord_loss_weight: 1.0
+
+# === 3D ROPE IN CROSS-ATTENTION ===
+cross_attn_rope: true
+
+# === SUBJECT ISOLATION IN SELF-ATTENTION ===
+subject_isolation_self_attn: true
+
+# === FLEX ATTENTION ===
+use_flex_attention: true
+
+# === POSITION FIXES ===
+zero_position_for_masked: true
+position_before_action: true
+
+# === SUBJECT MASK ===
+# Mask coord loss for padded subjects (games with fewer than 7 players)
+use_subject_mask: true
+
+# === TEXT PROMPT FOR VIDEO TOKENS ===
+# Per-game descriptions from utils/game_descriptions.py are pre-encoded with T5 at init,
+# then used as video token cross-attention context (replacing null embedding).
+# Video tokens attend to game-specific text; coord tokens attend to action embeddings.
+# Text encoder is freed after pre-encoding to save GPU memory.
+use_game_descriptions: true
+
+# Video parameters (512x512 resolution, 17 pixel frames → 5 latent)
+synthetic_num_frames: 17
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+# Smaller batch size due to 64x64 latent (4x larger than 32x32)
+batch_size: 4
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 2500
+negative_prompt: ''
+num_iter: 50000
+
+# Video shape: [batch, T_latent, C, H_latent, W_latent]
+# 512x512 / 8 = 64x64 latent, 17 pixel frames → 5 latent frames
+image_or_video_shape:
+- 1
+- 5
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 139-multi-game-coord-512

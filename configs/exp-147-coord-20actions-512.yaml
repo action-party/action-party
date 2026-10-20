@@ -1,0 +1,145 @@
+# 20-ACTION COORDINATE DIFFUSION - 512x512 RESOLUTION
+#
+# Finetuned from exp-139 (multi-game coord diffusion, 4 actions) on the
+# 20-action dataset with coordinate token diffusion + subject isolation.
+#
+# Dataset: melting_pot_all_games_512_20a_2k (46 games, 2000 samples each = 92k total)
+# Resolution: 512x512 → 64x64 latent spatial
+# Temporal: 81 pixel frames → 21 latent frames (20 actions × 4 steps + 1)
+#
+# Train (single node):
+#   torchrun --nproc_per_node=2 train.py --config configs/exp-147-coord-20actions-512.yaml
+# Train (4 nodes):
+#   torchrun --nproc_per_node=2 --nnodes=4 --node_rank=$RANK --master_addr=$MASTER --master_port=29500 \
+#     train.py --config configs/exp-147-coord-20actions-512.yaml
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+# Load text encoder for video token conditioning
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+# === PRETRAINED CHECKPOINT ===
+# Latest exp-139 (coord diffusion, 4 actions, 512x512)
+generator_ckpt: checkpoints/exp-139-multi-game-coord-512/checkpoint_model_059000/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MULTI-GAME MELTING POT DATASET (20-action) ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_20a_2k
+multi_game_dataset: true
+
+# === ACTION CONDITIONING ===
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 8
+num_subjects_total: 8
+num_subjects: 8
+num_action_classes: 25
+latent_patch_size: 8
+position_speed: 32
+
+# === GT POSITIONS FOR SPATIAL ROPE ===
+use_gt_positions_for_rope: true
+
+# === COORDINATE TOKEN MODE ===
+coord_token_mode: true
+coord_diffusion: true
+coord_temporal_rope: true
+coord_spatial_rope: true
+coord_layernorm: false
+coord_fourier_encoding: false
+coord_direct_embedding: false
+coord_no_encoder_decoder: false
+coord_train_full_dit: true
+coord_scale_factor: 4.0
+coord_loss_weight: 1.0
+
+# === 3D ROPE IN CROSS-ATTENTION ===
+cross_attn_rope: true
+
+# === SUBJECT ISOLATION IN SELF-ATTENTION ===
+subject_isolation_self_attn: true
+
+# === FLEX ATTENTION ===
+use_flex_attention: true
+
+# === POSITION FIXES ===
+zero_position_for_masked: true
+position_before_action: true
+
+# === SUBJECT MASK ===
+use_subject_mask: true
+
+# === TEXT PROMPT FOR VIDEO TOKENS ===
+use_game_descriptions: true
+
+# Video parameters (512x512 resolution, 81 pixel frames → 21 latent)
+synthetic_num_frames: 81
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+# 21 latent frames + coord diffusion + subject isolation = high memory
+# 139 used batch_size=4 with 5 frames; 4.2x more frames here, start conservative
+batch_size: 8
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 2500
+negative_prompt: ''
+num_iter: 50000
+
+# Video shape: [batch, T_latent, C, H_latent, W_latent]
+# 512x512 / 8 = 64x64 latent, 81 pixel frames → 21 latent frames
+image_or_video_shape:
+- 1
+- 21
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 147-coord-20actions-512

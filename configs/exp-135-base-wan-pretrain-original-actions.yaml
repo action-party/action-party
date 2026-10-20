@@ -1,0 +1,113 @@
+# BASE WAN PRE-TRAINING ON MELTING POT COINS (ORIGINAL ACTIONS)
+# 
+# Pre-train the base Wan model on Melting Pot coins videos WITHOUT:
+# - Action conditioning
+# - Position maps
+# - VideoJAM mode
+#
+# Just pure video generation with text conditioning:
+# "Sprites moving on a grid and picking up coins"
+#
+# Uses the same per-frame AR denoising setup as the earlier video-only pretraining run,
+# but on the original action space dataset (7 relative actions).
+# Goal: Pre-train the model on this AR task before adding action conditioning.
+#
+# Dataset: melting_pot_coins_original_actions (2500 samples, uses video latents only)
+#
+# Train:
+#   torchrun --nproc_per_node=2 train.py --config configs/exp-135-base-wan-pretrain-original-actions.yaml
+#
+# Inference:
+#   CUDA_VISIBLE_DEVICES=0 python inference_base_pretrain.py \
+#     --config_path configs/exp-135-base-wan-pretrain-original-actions.yaml \
+#     --checkpoint_path checkpoints/exp-135-base-wan-pretrain-original-actions/checkpoint_model_003000/model.pt \
+#     --dataset_idx 5 --seed 42
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+
+# Load text encoder for text conditioning
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MELTING POT COINS DATASET - ORIGINAL ACTIONS (VIDEO ONLY) ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_coins_original_actions
+# Use PositionTokenLMDBDataset format (this dataset uses video_latents_{i}_data keys)
+# Only affects dataset loading — no position/coord token behavior is enabled
+use_position_token_dataset: true
+
+# === NO ACTION/POSITION CONDITIONING ===
+# These are all disabled - pure video generation with text conditioning
+use_action_only_conditioning: false
+videojam_mode: false
+position_token_mode: false
+
+# === FIXED TEXT PROMPT ===
+# Override dataset prompts with this fixed prompt
+fixed_prompt: "Sprites moving on a grid and picking up coins"
+
+# Video parameters
+synthetic_num_frames: 33
+synthetic_height: 256
+synthetic_width: 256
+
+load_raw_video: false
+batch_size: 8
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 1000
+save_iters: 500
+negative_prompt: ''
+num_iter: 10000
+
+# Video shape (16ch video only, no position maps)
+image_or_video_shape:
+- 1
+- 9
+- 16
+- 32
+- 32
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 135-base-wan-pretrain-original-actions

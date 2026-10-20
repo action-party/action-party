@@ -1,0 +1,150 @@
+# MULTI-GAME VIEW-TOKEN DIFFUSION - 512×512 (46 Melting Pot games)
+#
+# Same data / resolution / pretrain as exp-139-multi-game-coord-512, but:
+# - No coord tokens / coord diffusion
+# - View tokens: 3×3 DiT latent-patch crops per subject, concat to sequence, decoupled noise,
+#   dense self-attn (video↔view), cross-attn subject binding (per_frame + isolation)
+#
+# Dataset: melting_pot_all_games_512_2k | 512×512 → 64×64 latent | 17 px frames → 5 latent
+#
+# === TRAIN (cluster, 2 nodes — same pattern as the other multi-game runs) ===
+#   NODE_NUM=2 ./submit_job.sh exp-153-multi-game-view-token-512
+#
+# === TRAIN (single node; batch_size is per GPU) ===
+#   torchrun --nproc_per_node=8 train.py \
+#     --config_path configs/exp-153-multi-game-view-token-512.yaml
+#   (default logdir: checkpoints/exp-153-multi-game-view-token-512 — same stem as submit_job.sh)
+#
+# Multi-node torchrun: set MASTER_ADDR, MASTER_PORT, NNODES, NODE_RANK, and per-rank env
+# from your scheduler (your submit script usually wraps this).
+#
+# === COMPUTE-MATCHED (same ~4.1M-sample budget as the 139-scale multi-game run) ===
+# Formula: samples_seen ≈ global_batch × num_iter,  global_batch = batch_size × world_size.
+#
+# Reference (compute-matching across the multi-game runs):
+#   139-style plan: batch_size=4 per GPU, 2×8 GPUs → global 64, num_iter=64000 → ~4.1M samples.
+#   This run: batch_size=16 per GPU, 16 GPUs → global 256, num_iter=16000 → ~4.1M samples (matched).
+#
+# This config uses bs 16 @ 16 GPUs, 16000 steps. Compare EMA ckpts by samples seen:
+# e.g. exp-153 step 16000 vs exp-139 step 64000.
+#
+# If OOM at step 1: batch_size=8 and num_iter=32000, or batch_size=4 and num_iter=64000 — still ~4.1M
+# samples at 16 GPUs. For 2× total samples (~8.2M), keep batch_size=16 and use num_iter=32000.
+#
+# Note: configs/exp-139-multi-game-coord-512.yaml currently sets num_iter: 50000 (not 64000),
+# i.e. ~3.2M samples @ global 64 — adjust 139 or scale 153’s num_iter if you need exact parity with
+# that file’s step count.
+#
+# batch_size is per rank; clips stay padded to num_subjects=8 for variable player counts.
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+  cross_attn_type: masked_position_cross_attn
+
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+# Same base as 139 (multi-game WAN pretrain at 512)
+generator_ckpt: checkpoints/exp-138-base-wan-pretrain-multi-game-512/checkpoint_model_022500/model.pt
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+lr: 1.0e-04
+cross_attn_lr_multiplier: 1.0
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_2k
+multi_game_dataset: true
+
+use_action_only_conditioning: true
+use_spatial_rope_conditioning: true
+num_subjects_per_video: 8
+num_subjects_total: 8
+num_subjects: 8
+num_action_classes: 25
+latent_patch_size: 8
+position_speed: 32
+
+use_gt_positions_for_rope: true
+
+# No coordinate stream
+coord_token_mode: false
+coord_diffusion: false
+
+view_token_mode: true
+view_crop_radius: 1
+view_loss_weight: 1.0
+
+cross_attn_rope: true
+per_frame_cross_attn: true
+cross_attn_subject_isolation: true
+
+# Dense self-attn over video + view
+subject_isolation_self_attn: false
+
+use_flex_attention: true
+
+zero_position_for_masked: true
+position_before_action: true
+
+use_subject_mask: true
+
+use_game_descriptions: true
+
+synthetic_num_frames: 17
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+# Per-GPU; see header for compute-matched num_iter vs global batch.
+batch_size: 16
+overfit_single_sample: false
+
+ema_weight: 0.9999
+ema_start_step: 100
+
+log_iters: 500
+# Shorter run; save more often
+save_iters: 1000
+negative_prompt: ''
+# ~4.1M samples @ global batch 256 (16 GPUs × batch_size 16) — matches the “139-scale” budget
+num_iter: 16000
+
+image_or_video_shape:
+- 1
+- 5
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 153-multi-game-view-token-512

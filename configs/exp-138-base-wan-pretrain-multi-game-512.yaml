@@ -1,0 +1,116 @@
+# BASE WAN PRE-TRAINING ON 46 MELTING POT GAMES (512x512)
+#
+# Pre-train the base Wan model on 46 Melting Pot games WITHOUT:
+# - Action conditioning
+# - Coordinate tokens
+# - Position maps
+# - VideoJAM mode
+#
+# Just pure video generation with per-game text conditioning
+# (game descriptions from utils/game_descriptions.py).
+#
+# This is the 512x512 multi-game equivalent of exp-135
+# (which pre-trained on coins only at 256x256).
+#
+# Dataset: melting_pot_all_games_512_2k (46 games, 2000 samples each = 92k total)
+# Resolution: 512x512 → 64x64 latent spatial
+# Temporal: 17 pixel frames → 5 latent frames
+#
+# Train:
+#   torchrun --nproc_per_node=2 train.py --config_path configs/exp-138-base-wan-pretrain-multi-game-512.yaml
+
+generator_fsdp_wrap_strategy: size
+text_encoder_fsdp_wrap_strategy: size
+
+model_kwargs:
+  timestep_shift: 5.0
+  random_init: false
+
+# Load text encoder for text conditioning
+load_vae: false
+load_text_encoder: true
+load_score_models: false
+
+num_train_timestep: 1000
+timestep_shift: 5.0
+guidance_scale: 1.0
+denoising_loss_type: flow
+mixed_precision: true
+seed: 42
+
+sampling_steps: 20
+sample_solver: unipc
+train_on_denoising_steps: false
+
+sharding_strategy: no_shard
+gradient_checkpointing: true
+
+# === OPTIMIZER SETTINGS ===
+lr: 1.0e-04
+beta1: 0.9
+beta2: 0.99
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+# === MULTI-GAME MELTING POT DATASET ===
+dataset_type: lmdb
+data_path: datasets/melting_pot_all_games_512_2k
+# use_position_token_dataset triggers the correct dataset loading branch in trainer
+use_position_token_dataset: true
+multi_game_dataset: true
+# Max subjects/actions across all 46 games (for padding)
+num_subjects_total: 7   # predator_prey has 7 players
+num_action_classes: 25  # fruit_market has 25 actions
+
+# === NO ACTION/POSITION CONDITIONING ===
+# These are all disabled - pure video generation with text conditioning
+use_action_only_conditioning: false
+videojam_mode: false
+position_token_mode: false
+coord_token_mode: false
+
+# === PER-GAME TEXT DESCRIPTIONS ===
+# Each game gets its own visual description from utils/game_descriptions.py
+# via MultiGameLMDBDataset. No fixed_prompt override.
+use_game_descriptions: true
+
+# Video parameters (512x512 resolution, 17 pixel frames → 5 latent)
+synthetic_num_frames: 17
+synthetic_height: 512
+synthetic_width: 512
+
+load_raw_video: false
+# 64x64 latent is 4x spatial vs 32x32. No action overhead, so batch 4 should fit.
+batch_size: 4
+overfit_single_sample: false
+
+# EMA
+ema_weight: 0.9999
+ema_start_step: 100
+
+# Logging
+log_iters: 500
+save_iters: 500
+negative_prompt: ''
+num_iter: 5000
+
+# Video shape: [batch, T_latent, C, H_latent, W_latent]
+# 512x512 / 8 = 64x64 latent, 17 pixel frames → 5 latent frames
+image_or_video_shape:
+- 1
+- 5
+- 16
+- 64
+- 64
+
+trainer: diffusion
+
+# === AR TRAINING MODE ===
+ar_training_mode: true
+per_frame_timesteps: true
+
+teacher_forcing: false
+independent_first_frame: false
+noise_augmentation_max_timestep: 0
+
+config_name: 138-base-wan-pretrain-multi-game-512
