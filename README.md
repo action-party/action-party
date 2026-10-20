@@ -110,7 +110,7 @@ our original setup. Known gaps:
 
 - The pre-built dataset and pretrained checkpoints are not released yet.
 - Training runs until stopped; `num_iter` only sets the LR schedule (see [`docs/TRAINING.md`](docs/TRAINING.md)).
-- The text-action baselines (exp-144, exp-146) import a `game_action_text` module that is not included yet.
+- The text-action baselines (exp-144, exp-146) need `game_action_text.py`, which is not included yet; the stub at the repo root documents the expected interface and raises a clear error.
 - exp-150, 152–154 and 157–159 set options the trainer does not implement yet (e.g. orientation state, view tokens). The headline path (exp-138 → exp-139) and the coins ablations (131, 134, 135, 141–143, 145) are the supported configs.
 - The trained player-tile classifiers used by the action-accuracy metrics in `scripts/eval/` are not included.
 
