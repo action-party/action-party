@@ -1,9 +1,9 @@
 """High-level wrappers around the Wan DiT, VAE and T5 text encoder.
 
 The main additions on top of the upstream Self-Forcing wrappers are the
-coord-token specific branches in :class:`WanDiffusionWrapper`: a new
-``_forward_coord_token`` code path, optional spatial-RoPE cross-attention,
-and subject-isolation masks in self-attention. Inference helpers live in the
+coord-token specific branches in :class:`WanDiffusionWrapper`: passing
+coord tokens through to ``WanModel._forward``, optional spatial-RoPE
+cross-attention, and subject-isolation masks in self-attention. Inference helpers live in the
 same class so that ``scripts/inference/inference_all_games_coord.py`` can run
 the model end-to-end on a Melting Pot scene.
 """
