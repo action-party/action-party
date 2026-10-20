@@ -1340,14 +1340,15 @@ class WanAttentionBlock(nn.Module):
                                             empty_prompt_embed=video_text_embeds)
             else:
                 x = x + self.cross_attn(self.norm3(x), context, context_lens)
-                
-                # FFN with uniform modulation
-                ffn_input = apply_uniform_modulation(self.norm2(x), e[4], e[3],
-                                                     e_pos[4] if e_pos else None, e_pos[3] if e_pos else None)
-                y = self.ffn(ffn_input)
-                x = x + apply_uniform_output_modulation(y, e[5], e_pos[5] if e_pos else None)
+
+            # FFN with uniform modulation
+            ffn_input = apply_uniform_modulation(self.norm2(x), e[4], e[3],
+                                                 e_pos[4] if e_pos else None, e_pos[3] if e_pos else None)
+            y = self.ffn(ffn_input)
+            x = x + apply_uniform_output_modulation(y, e[5], e_pos[5] if e_pos else None)
             return x
 
+        if not per_frame:
             x = cross_attn_ffn(x, context, context_lens, e, e_pos, grid_sizes, freqs, context_positions, coord_token_info, position_token_info)
         return x
 
