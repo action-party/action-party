@@ -18,9 +18,12 @@ is where* on screen.
 We add a small number of extra tokens to the DiT input sequence:
 
 * one **coord token** per ``(frame, player)`` — continuous ``(x, y)`` position
-  encoded by a fixed :class:`FourierCoordEncoder`;
-* **action tokens** per ``(frame, player)`` — discrete actions looked up in an
-  embedding table, cross-attended by the video.
+  encoded by a learned linear layer (``coord_encoder``);
+* **action tokens** per ``(frame, player)`` — discrete actions looked up in a
+  frozen embedding table. Each player's coord tokens cross-attend only to that
+  player's actions, while video tokens cross-attend to the game-description
+  text; the video sees the actions only through self-attention with the coord
+  tokens.
 
 Both sets of tokens carry 3D RoPE over ``(frame, y_patch, x_patch)`` so the
 attention can reason about spatial proximity. Coord tokens are denoised jointly
@@ -64,7 +67,8 @@ Standalone helpers extracted from `wan/modules/model.py`:
   still see everything so global scene modelling is unaffected.
 * :class:`FourierCoordEncoder` maps ``(x, y) ∈ [0, 1]^2`` to a ``dim``-D
   feature vector using sin/cos at ``2^k * π`` frequencies, then optionally
-  projects to the model width.
+  projects to the model width. It is used only with ``coord_fourier_encoding: true``;
+  the shipped configs use the learned linear encoder.
 
 ### `wan/modules/model.py`
 
@@ -73,23 +77,23 @@ Standalone helpers extracted from `wan/modules/model.py`:
   patchified ``(y, x)``.
 * :func:`temporal_rope_apply` applies RoPE *only* along the frame axis (used
   by a subset of ablations).
+* ``WanModel._forward`` packs video + coord tokens into one sequence, runs the
+  DiT blocks, and unpacks the video and coord outputs. The subject-isolation
+  mask for coord tokens is applied in ``WanSelfAttention.forward``.
 * :class:`WanTemporalActionCrossAttention` and
-  :class:`WanMultiSubjectCrossAttention` implement masked, per-subject
-  cross-attention from video queries to action tokens.
+  :class:`WanMultiSubjectCrossAttention` are earlier action cross-attention
+  variants; none of the shipped configs use them.
 
 ### `wan/modules/spatial_cross_attn.py`
 
-* :class:`WanSpatialCrossAttention`, :class:`WanMaskedPositionCrossAttention`,
-  :class:`WanCoordActionCrossAttention` — three flavours of spatial-RoPE
-  cross-attention used by different configs. They share a common RoPE
-  computation and differ in how keys/values are masked (per subject vs. per
-  frame).
-
-### `utils/wan_wrapper.py`
-
-* ``_forward_coord_token`` — the forward path that packs video + coord tokens,
-  builds the self-attention block mask, calls the DiT, and unpacks the two
-  outputs.
+* :class:`WanMaskedPositionCrossAttention` (``cross_attn_type:
+  masked_position_cross_attn``) is the cross-attention used by all shipped
+  configs: video tokens attend to the game-description text, and each
+  subject's coord tokens attend only to that subject's action embeddings
+  (with 3D RoPE when ``cross_attn_rope: true``).
+* :class:`WanSpatialCrossAttention` and :class:`WanCoordActionCrossAttention`
+  are alternative spatial-RoPE variants sharing the same RoPE computation;
+  none of the shipped configs use them.
 
 ## Loss
 
