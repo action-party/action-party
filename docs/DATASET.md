@@ -8,20 +8,10 @@ games × ~2000 samples each, VAE-encoded at 512×512, ≈113 GB on disk).
 
 ### Option 1 — download our pre-built LMDB
 
-> **TODO (user):** upload the pre-built LMDB somewhere (HF Datasets, S3, GCS)
-> and replace the URL below. The download should land in
-> ``datasets/melting_pot_all_games_512_2k`` at the repo root.
+Not available yet. Until it is released, regenerate the dataset with Option 2.
 
-```bash
-# placeholder — replace with real URL
-huggingface-cli download <your-hf-org>/melting-pot-512-2k \
-    --repo-type dataset \
-    --local-dir datasets/melting_pot_all_games_512_2k \
-    --local-dir-use-symlinks False
-```
-
-Verify the directory has one subfolder per game, each containing ``data.mdb``
-and ``lock.mdb``.
+The expected layout under ``datasets/melting_pot_all_games_512_2k`` is one
+subfolder per game, each containing ``shard_0.lmdb/{data.mdb,lock.mdb}``.
 
 ### Option 2 — regenerate from Melting Pot
 
@@ -38,8 +28,10 @@ Then:
 python scripts/dataset/create_all_games_dataset.py \
     --canvas_size 512 \
     --samples_per_game 2000 \
-    --output_dir datasets/melting_pot_all_games_512_2k
+    --output_path datasets/melting_pot_all_games_512_2k
 ```
+
+Run it from the repository root (the Wan VAE is loaded from ``wan_models/``).
 
 Notes:
 * ``--canvas_size 512`` uses the mini-map variants defined in
@@ -61,22 +53,28 @@ Two auxiliary scripts are provided for the ablation sets:
 
 For a quick smoke test, pass e.g. ``--games coins --samples_per_game 10`` to
 ``create_all_games_dataset.py`` and train with a 1-game subset. Update the
-config's ``data_path`` to point at that LMDB.
+config's ``data_path`` to point at that LMDB. When running
+``scripts/inference/inference_all_games_coord.py`` on such a small set, pass
+``--sample_offset 0`` (the default offset of 50 skips games with fewer samples).
 
 ## LMDB schema
 
 Each game is a separate LMDB consumed by
-:class:`utils.dataset.MultiGameLMDBDataset`. Every row stores a pickled dict:
+:class:`utils.dataset.MultiGameLMDBDataset`. Sample ``i`` is stored as one
+pickled array per field, under keys ``<field>_<i>_data``:
 
-| key               | shape                     | dtype    | description                                             |
+| field             | shape                     | dtype    | description                                             |
 |-------------------|---------------------------|----------|---------------------------------------------------------|
-| ``video_latents`` | ``[T_lat, 16, H, W]``     | float16  | VAE-encoded 17-frame clip (T_lat=5 for 17 pixel frames) |
-| ``actions``       | ``[S, T_action]``         | int64    | Discrete per-player actions (padded with 0 = NOOP)      |
+| ``video_latents`` | ``[T_lat, 16, H, W]``     | float32  | VAE-encoded 17-frame clip (T_lat=5 for 17 pixel frames) |
+| ``actions``       | ``[S, T_action]``         | int64    | Discrete per-player actions                             |
 | ``frame_coords``  | ``[T_lat, S, 2]``         | float32  | ``(x, y)`` pixel coords on the canvas (0..canvas_size)   |
 | ``orientations``  | ``[T_lat, S]``            | int64    | 0=N,1=E,2=S,3=W (tracked for relative-action games)     |
 | ``initial_positions`` | ``[S, 2]``            | float32  | ``(x, y)`` at the first frame of the clip                |
-| ``num_players``   | scalar                    | int      | Actual S for this game (padded up to ``num_subjects_total``) |
-| ``prompt``        | string                    | str      | Game slug (e.g. ``coins``)                              |
+| ``prompts``       | string                    | bytes    | Game slug (e.g. ``coins``)                              |
+
+Per-game metadata is stored once per shard: ``num_samples``, ``num_subjects``
+(actual S for this game, padded up to ``num_subjects_total`` at load time),
+``num_actions``, ``game_name``, ``image_size`` and ``video_latents_shape``.
 
 At load time, :class:`MultiGameLMDBDataset`:
 

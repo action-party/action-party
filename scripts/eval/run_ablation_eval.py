@@ -1059,7 +1059,7 @@ def main():
         if args.t5_minimal_cache:
             print("   (--t5_minimal_cache: skipping bulk GAME_DESCRIPTIONS T5 cache)")
         else:
-            from game_descriptions import GAME_DESCRIPTIONS
+            from utils.game_descriptions import GAME_DESCRIPTIONS
 
             unique_prompts = list(set(GAME_DESCRIPTIONS.values()))
             for i in range(0, len(unique_prompts), 8):
