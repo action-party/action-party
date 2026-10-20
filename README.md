@@ -138,3 +138,9 @@ This code is forked from [Self-Forcing](https://github.com/guandeh17/Self-Forcin
 
 See [`LICENSE`](LICENSE): Snap Inc. sample-code terms (non-commercial research), plus
 attribution and Apache License 2.0 text for Self-Forcing, Wan2.1, and Melting Pot portions.
+
+## Original release
+
+This code was developed at Snap Inc. and first released at
+[snap-research/action-party](https://github.com/snap-research/action-party). This
+repository is based on that release, with fixes to the setup docs and a few bugs.
