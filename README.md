@@ -126,11 +126,11 @@ This code is forked from [Self-Forcing](https://github.com/guandeh17/Self-Forcin
 ## Citation
 
 ```bibtex
-@article{pondaven2026actionparty,
-      title={ActionParty: Multi-Subject Action Binding in Generative Video Games},
-      author={Alexander Pondaven and Ziyi Wu and Igor Gilitschenski and Philip Torr and Sergey Tulyakov and Fabio Pizzati and Aliaksandr Siarohin},
-      journal={arXiv preprint arXiv:2604.02330},
-      year={2026},
+@inproceedings{pondaven2026actionparty,
+  title={{ActionParty}: Multi-Subject Action Binding in Generative Video Games},
+  author={Alexander Pondaven and Ziyi Wu and Igor Gilitschenski and Philip Torr and Sergey Tulyakov and Fabio Pizzati and Aliaksandr Siarohin},
+  booktitle={ECCV},
+  year={2026}
 }
 ```
 
