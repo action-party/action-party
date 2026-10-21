@@ -127,7 +127,7 @@ This code is forked from [Self-Forcing](https://github.com/guandeh17/Self-Forcin
 
 ```bibtex
 @inproceedings{pondaven2026actionparty,
-  title={{ActionParty}: Multi-Subject Action Binding in Generative Video Games},
+  title={ActionParty: Multi-Subject Action Binding in Generative Video Games},
   author={Alexander Pondaven and Ziyi Wu and Igor Gilitschenski and Philip Torr and Sergey Tulyakov and Fabio Pizzati and Aliaksandr Siarohin},
   booktitle={ECCV},
   year={2026}
